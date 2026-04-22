@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>URL Shortener — Technical Architecture</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+:root {
+  --bg:#080b12;--bg2:#0d1120;--bg3:#111827;
+  --border:#1e2a40;--border2:#263348;
+  --text:#e2e8f0;--muted:#64748b;--dim:#374151;
+  --blue:#3b82f6;--blue-bg:#0f1f3d;--blue-border:#1e3a6e;
+  --purple:#8b5cf6;--purple-bg:#1a0f3d;--purple-border:#3b1f7a;
+  --teal:#14b8a6;--teal-bg:#0a2520;--teal-border:#0f4a40;
+  --amber:#f59e0b;--amber-bg:#2a1a05;--amber-border:#6b4010;
+  --green:#22c55e;--green-bg:#0a2015;--green-border:#1a5c30;
+  --coral:#f97316;--coral-bg:#2a1008;--coral-border:#6b2c0a;
+  --pink:#ec4899;--pink-bg:#2a0a1f;--pink-border:#6b1040;
+  --red:#ef4444;--red-bg:#2a0a0a;--red-border:#6b1010;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+.hero{padding:48px 40px 36px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0a0f1e 0%,var(--bg) 100%);position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;top:-60px;left:50%;transform:translateX(-50%);width:600px;height:200px;background:radial-gradient(ellipse,rgba(59,130,246,0.08) 0%,transparent 70%);pointer-events:none;}
+.hero-tag{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;}
+.hero h1{font-size:30px;font-weight:800;color:#f8fafc;margin-bottom:6px;letter-spacing:-0.5px;}
+.nav{display:flex;gap:2px;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto;position:sticky;top:0;z-index:100;}
+.nav-btn{font-family:'Syne',sans-serif;font-size:11px;font-weight:600;padding:13px 16px;border:none;background:none;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s,border-color .15s;letter-spacing:.3px;}
+.nav-btn:hover{color:var(--text);}
+.nav-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+.section{display:none;padding:36px 40px;max-width:1200px;margin:0 auto;}
+.section.active{display:block;}
+.section-title{font-size:20px;font-weight:700;color:#f8fafc;margin-bottom:28px;}
+.panel-row{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:32px;align-items:start;}
+@media(max-width:900px){.panel-row{grid-template-columns:1fr;}}
+.sub-heading{font-size:13px;font-weight:700;color:#f8fafc;margin:24px 0 12px;display:flex;align-items:center;gap:8px;}
+.sub-heading::before{content:'';display:block;width:3px;height:14px;border-radius:2px;background:var(--blue);}
+.chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:auto;}
+.chart-wrap svg{display:block;margin:0 auto;}
+.detail-block{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;}
+.detail-block .db-title{font-size:12px;font-weight:700;margin-bottom:8px;font-family:'JetBrains Mono',monospace;}
+.detail-block.blue .db-title{color:var(--blue);}
+.detail-block.purple .db-title{color:var(--purple);}
+.detail-block.teal .db-title{color:var(--teal);}
+.detail-block.amber .db-title{color:var(--amber);}
+.detail-block.green .db-title{color:var(--green);}
+.detail-block.coral .db-title{color:var(--coral);}
+.detail-block.red .db-title{color:var(--red);}
+.detail-block p{font-size:11px;color:var(--muted);line-height:1.7;}
+.code-block{font-family:'JetBrains Mono',monospace;font-size:10.5px;background:#060810;border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-top:8px;line-height:1.8;overflow-x:auto;color:#94a3b8;}
+.code-block .k{color:#7dd3fc;}.code-block .s{color:#86efac;}.code-block .c{color:#475569;}.code-block .v{color:#fca5a5;}.code-block .fn{color:#c4b5fd;}.code-block .n{color:#fcd34d;}
+.route-table{width:100%;border-collapse:collapse;margin-bottom:24px;font-size:11px;}
+.route-table th{text-align:left;padding:9px 12px;font-size:10px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--border2);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.5px;}
+.route-table td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;color:#94a3b8;line-height:1.5;}
+.route-table tr:last-child td{border-bottom:none;}
+.method{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;padding:2px 5px;border-radius:3px;display:inline-block;}
+.get{background:#0a2020;color:var(--teal);border:1px solid var(--teal-border);}
+.post{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);}
+.del{background:#2a0a0a;color:#f87171;border:1px solid #6b1010;}
+.pat{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border);}
+.path-cell{font-family:'JetBrains Mono',monospace;color:#f8fafc;font-size:10.5px;}
+.badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;}
+.badge-auth{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border);}
+.badge-admin{background:var(--coral-bg);color:var(--coral);border:1px solid var(--coral-border);}
+.badge-open{background:var(--bg3);color:var(--muted);border:1px solid var(--border);}
+.schema-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:28px;}
+.schema-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.schema-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.schema-icon{width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;font-family:'JetBrains Mono',monospace;}
+.schema-name{font-size:13px;font-weight:700;color:#f8fafc;}
+.schema-rel{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;}
+.schema-fields{padding:10px 14px;}
+.field-row{display:flex;align-items:baseline;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:10px;font-family:'JetBrains Mono',monospace;}
+.field-row:last-child{border-bottom:none;}
+.field-name{color:#7dd3fc;min-width:130px;}
+.field-type{color:#86efac;min-width:55px;}
+.field-note{color:var(--muted);font-size:9px;}
+.jwt-box{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;}
+.jwt-part{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px;font-size:11px;}
+.jwt-part:last-child{border-bottom:none;}
+.jwt-part-name{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;min-width:62px;padding:2px 5px;border-radius:3px;text-align:center;}
+.jwt-header-tag{background:#1a2a40;color:#7dd3fc;border:1px solid #2d4a70;}
+.jwt-payload-tag{background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-border);}
+.jwt-sig-tag{background:var(--coral-bg);color:var(--coral);border:1px solid var(--coral-border);}
+.note{border-radius:8px;padding:12px 16px;margin-bottom:16px;border:1px solid;}
+.note.amber{background:var(--amber-bg);border-color:var(--amber-border);}
+.note.blue{background:var(--blue-bg);border-color:var(--blue-border);}
+.note.teal{background:var(--teal-bg);border-color:var(--teal-border);}
+.note.green{background:var(--green-bg);border-color:var(--green-border);}
+.note .note-title{font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-bottom:5px;}
+.note.amber .note-title{color:var(--amber);}
+.note.blue .note-title{color:var(--blue);}
+.note.teal .note-title{color:var(--teal);}
+.note.green .note-title{color:var(--green);}
+.note p{font-size:11px;color:var(--muted);line-height:1.6;}
+hr.div{border:none;border-top:1px solid var(--border);margin:24px 0;}
+</style>
+</head>
+<body>
+
+<!-- CHANGE 1: Removed the subtitle paragraph from hero, kept only tag and h1 -->
+<div class="hero">
+  <div class="hero-tag">Technical Architecture</div>
+  <h1>URL Shortener</h1>
+</div>
+
+<nav class="nav">
+  <button class="nav-btn active" onclick="show('auth',this)">1. Auth Flow</button>
+  <button class="nav-btn" onclick="show('guards',this)">2. Route Guards</button>
+  <button class="nav-btn" onclick="show('request',this)">3. Request Lifecycle</button>
+  <button class="nav-btn" onclick="show('redirect',this)">4. Redirect Engine</button>
+  <button class="nav-btn" onclick="show('schema',this)">5. Data Models</button>
+  <button class="nav-btn" onclick="show('routes',this)">6. All Routes</button>
+  <button class="nav-btn" onclick="show('analytics',this)">7. Analytics</button>
+  <button class="nav-btn" onclick="show('dashboard',this)">8. Dashboard</button>
+  <button class="nav-btn" onclick="show('utm',this)">9. UTM Tracking</button>
+  <button class="nav-btn" onclick="show('org',this)">10. Org Auto-fill</button>
+</nav>
+
+<!-- ═══════════════════ 1. AUTH ═══════════════════ -->
+<div id="auth" class="section active">
+  <div class="section-title">Authentication Flow</div>
+  <div class="panel-row">
+    <div class="panel-left">
+      <div class="sub-heading">Signup flow</div>
+      <div class="chart-wrap">
+        <svg width="320" viewBox="0 0 320 540" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="ar-r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="40" y="10" width="240" height="66" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#7dd3fc" font-weight="700">Angular Signup</text>
+          <text x="160" y="43" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">username, password, role</text>
+          <text x="160" y="57" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">POST /auth/signup</text>
+          <line x1="160" y1="76" x2="160" y2="101" stroke="#475569" stroke-width="1.5" marker-end="url(#ar)"/>
+          <polygon points="160,102 260,132 160,162 60,132" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="128" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">username exists?</text>
+          <line x1="260" y1="132" x2="295" y2="132" stroke="#ef4444" stroke-width="1.5" marker-end="url(#ar-r)"/>
+          <text x="273" y="126" font-family="JetBrains Mono,monospace" font-size="8" fill="#ef4444">yes</text>
+          <rect x="296" y="116" width="18" height="32" rx="4" fill="#2a0a0a" stroke="#6b1010" stroke-width="1"/>
+          <text x="305" y="136" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#f87171" transform="rotate(90,305,136)">400</text>
+          <line x1="160" y1="162" x2="160" y2="187" stroke="#475569" stroke-width="1.5" marker-end="url(#ar)"/>
+          <text x="168" y="179" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">no</text>
+          <rect x="40" y="188" width="240" height="44" rx="8" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="206" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#fcd34d" font-weight="700">bcrypt.hash(password, 10)</text>
+          <text x="160" y="223" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">10 salt rounds</text>
+          <line x1="160" y1="232" x2="160" y2="257" stroke="#475569" stroke-width="1.5" marker-end="url(#ar)"/>
+          <rect x="40" y="258" width="240" height="44" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="276" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#86efac" font-weight="700">new User().save()</text>
+          <text x="160" y="293" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">username, hashedPw, role</text>
+          <line x1="160" y1="302" x2="160" y2="327" stroke="#475569" stroke-width="1.5" marker-end="url(#ar)"/>
+          <rect x="40" y="328" width="240" height="44" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="346" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#86efac" font-weight="700">new Label("General")</text>
+          <text x="160" y="363" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">auto-created for new user</text>
+          <line x1="160" y1="372" x2="160" y2="397" stroke="#475569" stroke-width="1.5" marker-end="url(#ar)"/>
+          <rect x="40" y="398" width="240" height="44" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="416" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#5eead4" font-weight="700">router.navigate('/login')</text>
+          <text x="160" y="433" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">no token issued at signup</text>
+          <text x="160" y="528" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">SIGNUP FLOW</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel-right">
+      <div class="sub-heading">Login flow</div>
+      <div class="chart-wrap">
+        <svg width="320" viewBox="0 0 320 660" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="ar2r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="ar2g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="40" y="10" width="240" height="54" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#7dd3fc" font-weight="700">Angular Login</text>
+          <text x="160" y="43" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">username, password</text>
+          <text x="160" y="56" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">POST /auth/login</text>
+          <line x1="160" y1="64" x2="160" y2="89" stroke="#475569" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <polygon points="160,90 260,120 160,150 60,120" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="116" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">user found?</text>
+          <line x1="260" y1="120" x2="295" y2="120" stroke="#ef4444" stroke-width="1.5" marker-end="url(#ar2r)"/>
+          <text x="273" y="114" font-family="JetBrains Mono,monospace" font-size="8" fill="#ef4444">no</text>
+          <rect x="296" y="104" width="18" height="32" rx="4" fill="#2a0a0a" stroke="#6b1010" stroke-width="1"/>
+          <text x="305" y="124" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#f87171" transform="rotate(90,305,124)">400</text>
+          <line x1="160" y1="150" x2="160" y2="175" stroke="#475569" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <text x="168" y="167" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">yes</text>
+          <polygon points="160,176 260,206 160,236 60,206" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="202" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">bcrypt.compare()?</text>
+          <line x1="260" y1="206" x2="295" y2="206" stroke="#ef4444" stroke-width="1.5" marker-end="url(#ar2r)"/>
+          <text x="263" y="200" font-family="JetBrains Mono,monospace" font-size="8" fill="#ef4444">fail</text>
+          <rect x="296" y="190" width="18" height="32" rx="4" fill="#2a0a0a" stroke="#6b1010" stroke-width="1"/>
+          <text x="305" y="210" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#f87171" transform="rotate(90,305,210)">400</text>
+          <line x1="160" y1="236" x2="160" y2="261" stroke="#475569" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <text x="168" y="253" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">pass</text>
+          <rect x="40" y="262" width="240" height="60" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="280" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">jwt.sign({ id, username, role })</text>
+          <text x="160" y="296" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">secret: "mysecretkey", expires: 7d</text>
+          <text x="160" y="312" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">sends token + role back to Angular</text>
+          <line x1="160" y1="322" x2="160" y2="347" stroke="#475569" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <rect x="40" y="348" width="240" height="54" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="366" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">Angular stores token + role</text>
+          <text x="160" y="381" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">localStorage.setItem("token", ...)</text>
+          <text x="160" y="395" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">localStorage.setItem("role", ...)</text>
+          <line x1="160" y1="402" x2="160" y2="427" stroke="#475569" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <polygon points="160,428 260,458 160,488 60,458" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="454" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">role === 'admin'?</text>
+          <line x1="260" y1="458" x2="295" y2="458" stroke="#22c55e" stroke-width="1.5" marker-end="url(#ar2g)"/>
+          <text x="263" y="452" font-family="JetBrains Mono,monospace" font-size="8" fill="#22c55e">yes</text>
+          <rect x="296" y="442" width="20" height="32" rx="4" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="306" y="462" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#86efac" transform="rotate(90,306,462)">/admin</text>
+          <line x1="160" y1="488" x2="160" y2="513" stroke="#475569" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <text x="168" y="505" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">no</text>
+          <rect x="40" y="514" width="240" height="36" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="537" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">router.navigate('/dashboard')</text>
+          <text x="160" y="648" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">LOGIN FLOW</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="sub-heading">What's inside the JWT</div>
+  <div class="jwt-box">
+    <div class="jwt-part"><div class="jwt-part-name jwt-header-tag">HEADER</div><div class="jwt-content">{ "alg": "HS256", "typ": "JWT" }<br><span style="color:var(--muted)">Algorithm: HMAC SHA-256</span></div></div>
+    <div class="jwt-part"><div class="jwt-part-name jwt-payload-tag">PAYLOAD</div><div class="jwt-content">{ "id": "&lt;MongoDB _id&gt;", "username": "john", "role": "user/admin", "iat": 1234567, "exp": 1235167 }<br><span style="color:var(--muted)">id used to scope DB queries. role used by adminGuard. exp = 7 days from issue.</span></div></div>
+    <div class="jwt-part"><div class="jwt-part-name jwt-sig-tag">SIGNATURE</div><div class="jwt-content">HMACSHA256(base64(header)+"."+base64(payload), "mysecretkey")<br><span style="color:var(--muted)">Verified by jwt.verify() on every protected request. Tampered tokens fail here.</span></div></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 2. GUARDS ═══════════════════ -->
+<div id="guards" class="section">
+  <div class="section-title">Angular Route Guards</div>
+
+  <div class="detail-block blue">
+    <div class="db-title">How canActivate works</div>
+    <p>When a user navigates to a guarded route, Angular's Router calls the canActivate function <strong>before</strong> instantiating the component. Returns true → component loads. Returns false → navigation cancelled, router redirects elsewhere.</p>
+  </div>
+
+  <div class="panel-row">
+    <div class="panel-left">
+      <div class="sub-heading">authGuard</div>
+      <div class="chart-wrap">
+        <!-- CHANGE 2: Fixed spacing between return true and return false boxes in authGuard, added navigate('/login') below return false -->
+        <svg width="320" viewBox="0 0 320 430" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="agr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="agg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="40" y="10" width="240" height="44" rx="8" fill="#0d1120" stroke="#263348" stroke-width="1"/>
+          <text x="160" y="27" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#94a3b8">Navigate to</text>
+          <text x="160" y="44" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc">/home /dashboard /analytics /redirect</text>
+          <line x1="160" y1="54" x2="160" y2="79" stroke="#475569" stroke-width="1.5" marker-end="url(#ag)"/>
+          <rect x="60" y="80" width="200" height="40" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="96" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">authGuard() called</text>
+          <text x="160" y="111" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">by Angular Router</text>
+          <line x1="160" y1="120" x2="160" y2="145" stroke="#475569" stroke-width="1.5" marker-end="url(#ag)"/>
+          <polygon points="160,146 260,176 160,206 60,176" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="172" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">token in</text>
+          <text x="160" y="186" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">localStorage?</text>
+          <!-- no branch left — goes to return false box -->
+          <line x1="60" y1="176" x2="25" y2="176" stroke="#ef4444" stroke-width="1.5"/>
+          <line x1="25" y1="176" x2="25" y2="320" stroke="#ef4444" stroke-width="1.5"/>
+          <line x1="25" y1="320" x2="59" y2="320" stroke="#ef4444" stroke-width="1.5" marker-end="url(#agr)"/>
+          <text x="14" y="248" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#ef4444" transform="rotate(-90,14,248)">no token</text>
+          <!-- yes branch down — return true -->
+          <line x1="160" y1="206" x2="160" y2="231" stroke="#22c55e" stroke-width="1.5" marker-end="url(#agg)"/>
+          <text x="168" y="223" font-family="JetBrains Mono,monospace" font-size="8" fill="#22c55e">exists</text>
+          <rect x="60" y="232" width="200" height="36" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="248" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">return true</text>
+          <text x="160" y="263" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">→ component loads</text>
+          <!-- gap between return true and return false -->
+          <!-- return false box -->
+          <rect x="60" y="302" width="200" height="36" rx="8" fill="#2a0a0a" stroke="#6b1010" stroke-width="1"/>
+          <text x="160" y="318" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#f87171" font-weight="700">return false</text>
+          <text x="160" y="333" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">navigation cancelled</text>
+          <!-- arrow from return false to navigate('/login') -->
+          <line x1="160" y1="338" x2="160" y2="358" stroke="#ef4444" stroke-width="1.5" marker-end="url(#agr)"/>
+          <!-- navigate('/login') box -->
+          <rect x="60" y="359" width="200" height="30" rx="8" fill="#2a0a0a" stroke="#6b1010" stroke-width="1"/>
+          <text x="160" y="379" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#f87171" font-weight="700">navigate('/login')</text>
+          <text x="160" y="420" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">authGuard — checks token existence only</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel-right">
+      <div class="sub-heading">adminGuard</div>
+      <div class="chart-wrap">
+        <!-- CHANGE 2: adminGuard return false also shows navigate('/login') below it -->
+        <svg width="320" viewBox="0 0 320 560" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="adg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="adgr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="adgg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="60" y="10" width="200" height="40" rx="8" fill="#0d1120" stroke="#263348" stroke-width="1"/>
+          <text x="160" y="26" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#94a3b8">Navigate to</text>
+          <text x="160" y="41" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd">/admin</text>
+          <line x1="160" y1="50" x2="160" y2="75" stroke="#475569" stroke-width="1.5" marker-end="url(#adg)"/>
+          <!-- token check -->
+          <polygon points="160,76 260,106 160,136 60,106" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="102" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">token exists?</text>
+          <!-- no → goes to return false box -->
+          <line x1="60" y1="106" x2="24" y2="106" stroke="#ef4444" stroke-width="1.5"/>
+          <line x1="24" y1="106" x2="24" y2="464" stroke="#ef4444" stroke-width="1.5"/>
+          <line x1="24" y1="464" x2="59" y2="464" stroke="#ef4444" stroke-width="1.5" marker-end="url(#adgr)"/>
+          <text x="13" y="280" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#ef4444" transform="rotate(-90,13,280)">no token</text>
+          <line x1="160" y1="136" x2="160" y2="161" stroke="#475569" stroke-width="1.5" marker-end="url(#adg)"/>
+          <text x="168" y="153" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">yes</text>
+          <!-- decode -->
+          <rect x="40" y="162" width="240" height="54" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="180" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">atob(token.split('.')[1])</text>
+          <text x="160" y="196" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">decode JWT payload</text>
+          <text x="160" y="209" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">→ read payload.role</text>
+          <line x1="160" y1="216" x2="160" y2="241" stroke="#475569" stroke-width="1.5" marker-end="url(#adg)"/>
+          <!-- role check -->
+          <polygon points="160,242 260,272 160,302 60,272" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="268" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">role === 'admin'?</text>
+          <!-- not admin → right side to return false -->
+          <line x1="260" y1="272" x2="295" y2="272" stroke="#ef4444" stroke-width="1.5"/>
+          <line x1="295" y1="272" x2="295" y2="464" stroke="#ef4444" stroke-width="1.5"/>
+          <line x1="295" y1="464" x2="281" y2="464" stroke="#ef4444" stroke-width="1.5" marker-end="url(#adgr)"/>
+          <text x="304" y="360" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#ef4444" transform="rotate(90,304,360)">not admin</text>
+          <!-- yes → load admin -->
+          <line x1="160" y1="302" x2="160" y2="327" stroke="#22c55e" stroke-width="1.5" marker-end="url(#adgg)"/>
+          <text x="168" y="319" font-family="JetBrains Mono,monospace" font-size="8" fill="#22c55e">yes</text>
+          <rect x="40" y="328" width="240" height="40" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="344" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">return true</text>
+          <text x="160" y="359" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">→ Admin dashboard loads</text>
+          <!-- shared return false box -->
+          <rect x="60" y="446" width="200" height="36" rx="8" fill="#2a0a0a" stroke="#6b1010" stroke-width="1"/>
+          <text x="160" y="462" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#f87171" font-weight="700">return false</text>
+          <text x="160" y="477" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">navigation cancelled</text>
+          <!-- arrow to navigate('/login') -->
+          <line x1="160" y1="482" x2="160" y2="502" stroke="#ef4444" stroke-width="1.5" marker-end="url(#adgr)"/>
+          <!-- navigate('/login') box -->
+          <rect x="60" y="503" width="200" height="30" rx="8" fill="#2a0a0a" stroke="#6b1010" stroke-width="1"/>
+          <text x="160" y="523" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#f87171" font-weight="700">navigate('/login')</text>
+          <text x="160" y="550" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">adminGuard — token + role check</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 3. REQUEST LIFECYCLE ═══════════════════ -->
+<div id="request" class="section">
+  <div class="section-title">Request Lifecycle</div>
+  <div class="section-sub">Exact order from Angular making an HTTP call to the component getting data back. Requests route to different middleware depending on which endpoint they hit.</div>
+  <div class="panel-row">
+    <div class="panel-left">
+      <div class="sub-heading">Full lifecycle diagram</div>
+      <div class="chart-wrap">
+        <!-- CHANGE 3: Fixed "which route?" section — /urldata /labels /utm /org label repositioned cleanly below diamond -->
+        <svg width="320" viewBox="0 0 320 820" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="rl" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="rlr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <!-- 1 Angular -->
+          <rect x="30" y="10" width="260" height="56" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#7dd3fc" font-weight="700">Angular Component</text>
+          <text x="160" y="43" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">http.get('/api/some-endpoint',</text>
+          <text x="160" y="57" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">{ headers: { Authorization: Bearer } })</text>
+          <line x1="160" y1="66" x2="160" y2="91" stroke="#475569" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- 2 CORS+JSON -->
+          <rect x="30" y="92" width="260" height="44" rx="8" fill="#2a1008" stroke="#6b2c0a" stroke-width="1"/>
+          <text x="160" y="109" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fb923c" font-weight="700">Express: cors() + express.json()</text>
+          <text x="160" y="127" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">allow origin, parse req.body</text>
+          <line x1="160" y1="136" x2="160" y2="161" stroke="#475569" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- 3 which route diamond -->
+          <polygon points="160,162 260,192 160,222 60,192" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="188" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">which route?</text>
+          <!-- /auth branch left — no MW -->
+          <line x1="60" y1="192" x2="25" y2="192" stroke="#22c55e" stroke-width="1.5" marker-end="url(#rl)"/>
+          <text x="40" y="186" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#22c55e">/auth</text>
+          <rect x="4" y="176" width="18" height="32" rx="4" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="13" y="196" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#86efac" transform="rotate(-90,13,196)">no MW</text>
+          <!-- no MW back to route handler -->
+          <line x1="4" y1="208" x2="4" y2="360" stroke="#22c55e" stroke-width="1.5"/>
+          <line x1="4" y1="360" x2="30" y2="360" stroke="#22c55e" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- /admin branch right — adminMW -->
+          <line x1="260" y1="192" x2="295" y2="192" stroke="#f97316" stroke-width="1.5" marker-end="url(#rl)"/>
+          <text x="263" y="186" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#f97316">/admin</text>
+          <rect x="296" y="176" width="18" height="32" rx="4" fill="#2a1008" stroke="#6b2c0a" stroke-width="1"/>
+          <text x="305" y="196" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#fb923c" transform="rotate(90,305,196)">adminMW</text>
+          <!-- adminMW back to route handler -->
+          <line x1="314" y1="208" x2="314" y2="360" stroke="#f97316" stroke-width="1.5"/>
+          <line x1="314" y1="360" x2="290" y2="360" stroke="#f97316" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- CHANGE 3: /urldata /labels /utm /org label now inside a clean label box below the diamond -->
+          <line x1="160" y1="222" x2="160" y2="237" stroke="#475569" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- label box for the middle branch -->
+          <rect x="70" y="238" width="180" height="22" rx="5" fill="#0d1120" stroke="#263348" stroke-width="1"/>
+          <text x="160" y="253" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#fcd34d">/urldata /labels /utm /org</text>
+          <line x1="160" y1="260" x2="160" y2="277" stroke="#475569" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- 4 authMiddleware -->
+          <rect x="30" y="278" width="260" height="60" rx="8" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="296" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">authMiddleware</text>
+          <text x="160" y="311" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">read Authorization header</text>
+          <text x="160" y="326" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">jwt.verify(token) → attach req.user</text>
+          <!-- fail branch -->
+          
+          <line x1="160" y1="338" x2="160" y2="363" stroke="#475569" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- 5 route handler -->
+          <rect x="30" y="364" width="260" height="64" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="382" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">Route Handler</text>
+          <text x="160" y="397" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">/auth /urldata /labels /utm /admin /org</text>
+          <text x="160" y="411" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">routes to correct handler based on URL</text>
+          <text x="160" y="422" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">uses req.user.id to scope queries</text>
+          <line x1="160" y1="428" x2="160" y2="453" stroke="#475569" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- 6 MongoDB -->
+          <rect x="30" y="454" width="260" height="44" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="471" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">MongoDB — Mongoose query</text>
+          <text x="160" y="489" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">hydrates documents → JS objects</text>
+          <line x1="160" y1="498" x2="160" y2="523" stroke="#475569" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- 7 res.json -->
+          <rect x="30" y="524" width="260" height="44" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="541" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">res.json(data) → HTTP 200</text>
+          <text x="160" y="559" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">JSON serialised, sent back</text>
+          <line x1="160" y1="568" x2="160" y2="593" stroke="#475569" stroke-width="1.5" marker-end="url(#rl)"/>
+          <!-- 8 Angular receives -->
+          <rect x="30" y="594" width="260" height="54" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="612" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">Angular HttpClient</text>
+          <text x="160" y="627" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">Observable emits value</text>
+          <text x="160" y="642" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">.subscribe() fires → UI re-renders</text>
+          <text x="160" y="808" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">FULL REQUEST LIFECYCLE</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel-right">
+      <div class="sub-heading">authMiddleware internals</div>
+      <div class="detail-block amber">
+        <div class="db-title">authMiddleware — how it works</div>
+        <p>Reads <code>req.headers["authorization"]</code>. Splits on space to get the token after "Bearer". Calls <code>jwt.verify(token, SECRET)</code> — validates signature + checks expiry. On success attaches decoded payload as <code>req.user</code>.</p>
+        <div class="code-block">
+<span class="k">const</span> <span class="v">token</span> = authHeader.<span class="fn">split</span>(<span class="s">" "</span>)[<span class="n">1</span>];<br>
+<span class="fn">jwt.verify</span>(token, SECRET, (err, user) => {<br>
+&nbsp;&nbsp;<span class="k">if</span> (err) <span class="k">return</span> res.<span class="fn">status</span>(<span class="n">403</span>).<span class="fn">json</span>(...);<br>
+&nbsp;&nbsp;req.user = user; <span class="c">// {id, username, role}</span><br>
+&nbsp;&nbsp;<span class="fn">next</span>();<br>
+});<br>
+<span class="c">// Applied on: /urldata /labels /utm /org</span>
+        </div>
+      </div>
+
+      <div class="sub-heading">adminMiddleware internals</div>
+      <div class="detail-block coral">
+        <div class="db-title">adminMiddleware — how it works</div>
+        <p>Does everything authMiddleware does, then additionally checks <code>user.role !== "admin"</code> and returns 403 if not admin. Attached at the app level for <code>/admin</code> routes.</p>
+        <div class="code-block">
+<span class="fn">jwt.verify</span>(token, SECRET, (err, user) => {<br>
+&nbsp;&nbsp;<span class="k">if</span> (err) <span class="k">return</span> res.<span class="fn">status</span>(<span class="n">403</span>).<span class="fn">json</span>(...);<br>
+&nbsp;&nbsp;<span class="k">if</span> (user.role !== <span class="s">"admin"</span>)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="k">return</span> res.<span class="fn">status</span>(<span class="n">403</span>).<span class="fn">json</span>(...);<br>
+&nbsp;&nbsp;req.user = user;<br>
+&nbsp;&nbsp;<span class="fn">next</span>();<br>
+});<br>
+<span class="c">// Applied on: /admin routes</span>
+        </div>
+      </div>
+
+      <div class="sub-heading">Failure cases</div>
+      <div class="detail-block red">
+        <div class="db-title">No token → 401</div>
+        <p>If <code>Authorization</code> header is missing, middleware returns 401 immediately without calling next().</p>
+      </div>
+      <div class="detail-block red">
+        <div class="db-title">Invalid / expired token → 403</div>
+        <p>jwt.verify() errors if tampered or expired. Returns 403. Angular Observable errors — component doesn't update.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 4. REDIRECT ENGINE ═══════════════════ -->
+<div id="redirect" class="section">
+  <div class="section-title">Redirect Engine — GET /go/:shortid</div>
+  <div class="section-sub">The most complex endpoint. Device detection, deep link routing with fallback chains, linkData param injection, visit logging, and store redirect handling.</div>
+  <div class="panel-row">
+    <div class="panel-left">
+      <div class="sub-heading">Main redirect + device routing</div>
+      <div class="chart-wrap">
+        <!-- CHANGE 4: Fixed Android and iOS routing boxes so they don't clash — laid out vertically with clear separation -->
+        <svg width="320" viewBox="0 0 320 1020" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="re" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="rer" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="reb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="rep" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="reg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <!-- Entry -->
+          <rect x="40" y="10" width="240" height="44" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">GET /go/:shortid — public</text>
+          <text x="160" y="45" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">no auth required</text>
+          <line x1="160" y1="54" x2="160" y2="79" stroke="#475569" stroke-width="1.5" marker-end="url(#re)"/>
+          <!-- URL found? -->
+          <polygon points="160,80 260,110 160,140 60,110" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="106" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">URL found in DB?</text>
+          <line x1="260" y1="110" x2="295" y2="110" stroke="#ef4444" stroke-width="1.5" marker-end="url(#rer)"/>
+          <text x="263" y="104" font-family="JetBrains Mono,monospace" font-size="8" fill="#ef4444">no</text>
+          <text x="297" y="107" font-family="JetBrains Mono,monospace" font-size="8" fill="#f87171">404</text>
+          <line x1="160" y1="140" x2="160" y2="165" stroke="#475569" stroke-width="1.5" marker-end="url(#re)"/>
+          <text x="168" y="157" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">found</text>
+          <!-- log visit -->
+          <rect x="40" y="166" width="240" height="44" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="184" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">parseVisit(req) → log visit</text>
+          <text x="160" y="201" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">push to visithistory[] → save</text>
+          <line x1="160" y1="210" x2="160" y2="235" stroke="#475569" stroke-width="1.5" marker-end="url(#re)"/>
+          <!-- utm? -->
+          <polygon points="160,236 260,261 160,286 60,261" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="257" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">utm_id in query?</text>
+          <line x1="260" y1="261" x2="295" y2="261" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#re)"/>
+          <text x="263" y="255" font-family="JetBrains Mono,monospace" font-size="8" fill="#8b5cf6">yes</text>
+          <text x="297" y="258" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#c4b5fd">log UTM</text>
+          <line x1="160" y1="286" x2="160" y2="311" stroke="#475569" stroke-width="1.5" marker-end="url(#re)"/>
+          <!-- detect device -->
+          <polygon points="160,312 260,342 160,372 60,342" fill="#2a1008" stroke="#6b2c0a" stroke-width="1"/>
+          <text x="160" y="338" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fb923c" font-weight="700">isAndroid? isIOS? Desktop?</text>
+
+          <!-- ANDROID branch — goes left -->
+          <line x1="60" y1="342" x2="14" y2="342" stroke="#3b82f6" stroke-width="1.5"/>
+          <line x1="14" y1="342" x2="14" y2="410" stroke="#3b82f6" stroke-width="1.5"/>
+          <line x1="14" y1="410" x2="39" y2="410" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#reb)"/>
+          <text x="5" y="370" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#3b82f6" transform="rotate(-90,5,370)">Android</text>
+
+          <!-- Android routing box -->
+          <rect x="40" y="392" width="240" height="80" rx="6" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="410" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7dd3fc" font-weight="700">Android routing</text>
+          <text x="160" y="425" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">androidUrl set? → use intent://</text>
+          <text x="160" y="438" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">else androidWebUrl? → use that</text>
+          <text x="160" y="451" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">else → fall back to longurl</text>
+          <text x="160" y="464" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">+ append linkData params</text>
+
+          <line x1="160" y1="472" x2="160" y2="497" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#reb)"/>
+
+          <!-- iOS branch — comes from right of diamond -->
+          <line x1="260" y1="342" x2="306" y2="342" stroke="#8b5cf6" stroke-width="1.5"/>
+          <line x1="306" y1="342" x2="306" y2="530" stroke="#8b5cf6" stroke-width="1.5"/>
+          <line x1="306" y1="530" x2="281" y2="530" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#rep)"/>
+          <text x="315" y="424" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#8b5cf6" transform="rotate(90,315,424)">iOS</text>
+
+          <!-- iOS routing box — below Android box, no overlap -->
+          <rect x="40" y="498" width="240" height="70" rx="6" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="516" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#c4b5fd" font-weight="700">iOS routing</text>
+          <text x="160" y="531" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">iosUrl set? → use App Store URL</text>
+          <text x="160" y="544" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">else iosWebUrl? → use that</text>
+          <text x="160" y="557" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">else → fall back to longurl</text>
+
+          <line x1="160" y1="568" x2="160" y2="593" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#rep)"/>
+
+          <!-- Desktop branch — comes straight down from diamond -->
+          <!-- label for desktop -->
+          <text x="126" y="390" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">Desktop ↓</text>
+
+          <!-- Desktop box — below iOS box -->
+          <rect x="40" y="594" width="240" height="40" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="610" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">Desktop → always longurl</text>
+          <text x="160" y="625" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">+ linkData params appended</text>
+
+          <!-- Desktop line from diamond down through Android and iOS boxes area — dashed to distinguish -->
+          <!-- We draw a dashed line on right edge from diamond bottom past android/ios to desktop -->
+          <!-- Actually use a clean approach: thin dashed line from 372 to 594 on x=245 -->
+          <line x1="245" y1="372" x2="245" y2="594" stroke="#22c55e" stroke-width="1" stroke-dasharray="4 3"/>
+          <line x1="245" y1="594" x2="281" y2="594" stroke="#22c55e" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#reg)"/>
+          <text x="251" y="488" font-family="JetBrains Mono,monospace" font-size="7" fill="#22c55e">Desktop</text>
+
+          <line x1="160" y1="634" x2="160" y2="659" stroke="#475569" stroke-width="1.5" marker-end="url(#re)"/>
+
+          <!-- buildParams -->
+          <rect x="40" y="660" width="240" height="40" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="676" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">buildParams(finalUrl)</text>
+          <text x="160" y="691" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">append linkData as query string</text>
+          <line x1="160" y1="700" x2="160" y2="725" stroke="#475569" stroke-width="1.5" marker-end="url(#re)"/>
+
+          <!-- redirect -->
+          <rect x="40" y="726" width="240" height="40" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="742" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">res.redirect(finalUrl)</text>
+          <text x="160" y="757" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">HTTP 302 to browser</text>
+          <text x="160" y="1008" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">REDIRECT ENGINE</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel-right">
+      <div class="sub-heading">parseVisit — detection logic</div>
+      <div class="detail-block green">
+        <div class="db-title">parseVisit utility</div>
+        <p>Reads User-Agent header. Uses ordered regex tests. Browser order matters — Edge/Opera must be checked before Chrome since their UA strings also contain "Chrome".</p>
+        <div class="code-block">
+<span class="c">// Device (checked in order)</span><br>
+/iphone|ipad|ipod/i → <span class="s">"iOS"</span><br>
+/android/i → <span class="s">"Android"</span><br>
+/tablet/i → <span class="s">"Tablet"</span><br>
+default → <span class="s">"Desktop"</span><br><br>
+<span class="c">// Browser (order matters!)</span><br>
+/edg\//i → <span class="s">"Edge"</span><br>
+/opr\//i → <span class="s">"Opera"</span><br>
+/chrome/i → <span class="s">"Chrome"</span><br>
+/firefox/i → <span class="s">"Firefox"</span><br>
+/safari/i → <span class="s">"Safari"</span>
+        </div>
+      </div>
+
+      <div class="sub-heading">Store redirect flow</div>
+      <div class="chart-wrap">
+        <svg width="280" viewBox="0 0 280 440" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="sr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="20" y="10" width="240" height="54" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="140" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#7dd3fc" font-weight="700">Android: res.redirect(intent://...)</text>
+          <text x="140" y="42" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">intent:// URL sent to browser</text>
+          <text x="140" y="55" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">S.browser_fallback_url = /store-redirect/...</text>
+          <line x1="140" y1="64" x2="140" y2="89" stroke="#475569" stroke-width="1.5" marker-end="url(#sr)"/>
+          <polygon points="140,90 220,115 140,140 60,115" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="140" y="111" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#fcd34d" font-weight="700">app installed?</text>
+          <line x1="220" y1="115" x2="254" y2="115" stroke="#22c55e" stroke-width="1.5" marker-end="url(#sr)"/>
+          <text x="222" y="109" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#22c55e">yes</text>
+          <text x="256" y="112" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#86efac">opens app</text>
+          <line x1="140" y1="140" x2="140" y2="165" stroke="#ef4444" stroke-width="1.5" marker-end="url(#sr)"/>
+          <text x="148" y="157" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#ef4444">no</text>
+          <rect x="20" y="166" width="240" height="44" rx="8" fill="#2a1008" stroke="#6b2c0a" stroke-width="1"/>
+          <text x="140" y="184" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#fb923c" font-weight="700">GET /store-redirect/:urlId/android</text>
+          <text x="140" y="200" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">browser follows fallback_url</text>
+          <line x1="140" y1="210" x2="140" y2="235" stroke="#475569" stroke-width="1.5" marker-end="url(#sr)"/>
+          <rect x="20" y="236" width="240" height="44" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="140" y="254" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#86efac" font-weight="700">log to storeRedirects[]</text>
+          <text x="140" y="269" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">{ timestamp, platform:"android" }</text>
+          <line x1="140" y1="280" x2="140" y2="305" stroke="#475569" stroke-width="1.5" marker-end="url(#sr)"/>
+          <rect x="20" y="306" width="240" height="54" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="140" y="324" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#c4b5fd" font-weight="700">res.redirect(androidPlaystoreUrl)</text>
+          <text x="140" y="339" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">from Url document</text>
+          <text x="140" y="353" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#64748b">fallback: play.google.com/store</text>
+          <text x="140" y="430" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">STORE REDIRECT FLOW</text>
+        </svg>
+      </div>
+
+      <div class="sub-heading">buildParams — linkData injection</div>
+      <div class="detail-block teal">
+        <div class="db-title">Query param injection</div>
+        <p>linkData[] key-value pairs are converted to query string and appended to destination URL. Uses <code>&amp;</code> if URL already has <code>?</code>, else uses <code>?</code>. For intent:// URLs the params are injected into the path part before the <code>#Intent</code> separator.</p>
+        <div class="code-block">
+linkData = [{key:<span class="s">"offer"</span>, value:<span class="s">"SAVE20"</span>}]<br>
+→ <span class="s">"https://site.com/page?offer=SAVE20"</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 5. DATA MODELS ═══════════════════ -->
+<div id="schema" class="section">
+  <div class="section-title">Data Models — MongoDB Schemas</div>
+ <div class="section-sub">All six Mongoose schemas with fields, types, relationships, and how they reference each other.</div>
+  <div class="sub-heading">Schema relationship diagram</div>
+  <div class="chart-wrap" style="margin-bottom:24px;">
+    <!-- CHANGE 5: Fixed the User→Utm line — rerouted to go below/around boxes, not overlapping them -->
+    <svg width="700" viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="sm" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker></defs>
+      <!-- User -->
+      <rect x="10" y="85" width="100" height="60" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+      <text x="60" y="108" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="#c4b5fd" font-weight="700">User</text>
+      <text x="60" y="124" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">username</text>
+      <text x="60" y="136" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">role</text>
+      <!-- Url -->
+      <rect x="190" y="10" width="140" height="110" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+      <text x="260" y="30" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="#7dd3fc" font-weight="700">Url</text>
+      <text x="260" y="46" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">shorturl, longurl</text>
+      <text x="260" y="59" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">androidUrl, iosUrl</text>
+      <text x="260" y="72" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">androidWebUrl, iosWebUrl</text>
+      <text x="260" y="85" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">playstoreUrl, appStoreUrl</text>
+      <text x="260" y="98" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">linkData[], visithistory[]</text>
+      <text x="260" y="111" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">storeRedirects[]</text>
+      <!-- Label -->
+      <rect x="190" y="150" width="140" height="60" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+      <text x="260" y="174" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="#86efac" font-weight="700">Label</text>
+      <text x="260" y="190" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">name</text>
+      <text x="260" y="202" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">urls[] (ObjectId refs)</text>
+      <!-- Utm -->
+      <rect x="410" y="10" width="110" height="80" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+      <text x="465" y="30" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" fill="#5eead4" font-weight="700">Utm</text>
+      <text x="465" y="46" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">source/medium/campaign</text>
+      <text x="465" y="59" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">visithistory[]</text>
+      <!-- Org -->
+      <rect x="410" y="130" width="110" height="60" rx="8" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+      <text x="465" y="153" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#fcd34d" font-weight="700">Organization</text>
+      <text x="465" y="168" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">name (unique)</text>
+      <text x="465" y="181" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">password (hashed)</text>
+      <!-- OrgLink -->
+      <rect x="545" y="130" width="105" height="60" rx="8" fill="#2a1008" stroke="#6b2c0a" stroke-width="1"/>
+      <text x="597" y="153" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10" fill="#fb923c" font-weight="700">OrgLink</text>
+      <text x="597" y="168" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">android fields</text>
+      <text x="597" y="181" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">ios fields</text>
+
+      <!-- Arrow: User → Url (userId) — goes right from User to Url top-left -->
+      <line x1="110" y1="100" x2="189" y2="60" stroke="#475569" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#sm)"/>
+      <text x="143" y="72" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#64748b">userId</text>
+
+      <!-- Arrow: User → Label (userId) — goes right-down from User to Label -->
+      <line x1="110" y1="120" x2="189" y2="175" stroke="#475569" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#sm)"/>
+      <text x="143" y="158" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#64748b">userId</text>
+
+      <!-- CHANGE 5: User → Utm line now goes: User bottom → down below all boxes → right → up to Utm bottom -->
+      <!-- Route: from User(60,145) go down to y=230, then right to x=465, then up to Utm bottom(465,90) -->
+      <line x1="60" y1="145" x2="60" y2="235" stroke="#475569" stroke-width="1" stroke-dasharray="4 2"/>
+      <line x1="60" y1="235" x2="465" y2="235" stroke="#475569" stroke-width="1" stroke-dasharray="4 2"/>
+      <line x1="465" y1="235" x2="465" y2="91" stroke="#475569" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#sm)"/>
+      <text x="255" y="248" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#64748b">userId (User → Utm)</text>
+
+      <!-- Arrow: Url → Utm (urlId) — goes right from Url to Utm -->
+      <line x1="330" y1="50" x2="409" y2="48" stroke="#475569" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#sm)"/>
+      <text x="370" y="42" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#64748b">urlId</text>
+
+      <!-- Arrow: Url → Label (urls[]) — goes down from Url to Label -->
+      <line x1="260" y1="120" x2="260" y2="149" stroke="#475569" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#sm)"/>
+      <text x="272" y="138" font-family="JetBrains Mono,monospace" font-size="7" fill="#64748b">urls[]</text>
+
+      <!-- Arrow: Org → OrgLink (orgId) -->
+      <line x1="520" y1="160" x2="544" y2="160" stroke="#475569" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#sm)"/>
+      <text x="531" y="154" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#64748b">orgId</text>
+    </svg>
+  </div>
+
+  <div class="schema-grid">
+    <div class="schema-card">
+      <div class="schema-header"><div class="schema-icon" style="background:#0f1f3d;color:#3b82f6;border:1px solid #1e3a6e;">U</div><div><div class="schema-name">Url</div><div class="schema-rel">ref: User(userId)</div></div></div>
+      <div class="schema-fields">
+        <div class="field-row"><span class="field-name">shorturl</span><span class="field-type">String</span><span class="field-note">required, shortid generated</span></div>
+        <div class="field-row"><span class="field-name">longurl</span><span class="field-type">String</span><span class="field-note">required, destination</span></div>
+        <div class="field-row"><span class="field-name">userId</span><span class="field-type">ObjectId</span><span class="field-note">ref: User</span></div>
+        <div class="field-row"><span class="field-name">customName</span><span class="field-type">String</span><span class="field-note">default: ""</span></div>
+        <div class="field-row"><span class="field-name">androidUrl</span><span class="field-type">String</span><span class="field-note">intent:// deep link</span></div>
+        <div class="field-row"><span class="field-name">iosUrl</span><span class="field-type">String</span><span class="field-note">App Store URL</span></div>
+        <div class="field-row"><span class="field-name">androidWebUrl</span><span class="field-type">String</span><span class="field-note">fallback web (Android)</span></div>
+        <div class="field-row"><span class="field-name">iosWebUrl</span><span class="field-type">String</span><span class="field-note">fallback web (iOS)</span></div>
+        <div class="field-row"><span class="field-name">androidPlaystoreUrl</span><span class="field-type">String</span><span class="field-note">Play Store link</span></div>
+        <div class="field-row"><span class="field-name">iosAppStoreUrl</span><span class="field-type">String</span><span class="field-note">App Store link</span></div>
+        <div class="field-row"><span class="field-name">linkData[]</span><span class="field-type">Array</span><span class="field-note">[{key,value}]</span></div>
+        <div class="field-row"><span class="field-name">visithistory[]</span><span class="field-type">Array</span><span class="field-note">[{timestamp,device,browser,referrer}]</span></div>
+        <div class="field-row"><span class="field-name">storeRedirects[]</span><span class="field-type">Array</span><span class="field-note">[{timestamp,platform}]</span></div>
+      </div>
+    </div>
+    <div class="schema-card">
+      <div class="schema-header"><div class="schema-icon" style="background:#1a0f3d;color:#8b5cf6;border:1px solid #3b1f7a;">U</div><div><div class="schema-name">User</div><div class="schema-rel">root — referenced by all</div></div></div>
+      <div class="schema-fields">
+        <div class="field-row"><span class="field-name">username</span><span class="field-type">String</span><span class="field-note">required, unique</span></div>
+        <div class="field-row"><span class="field-name">password</span><span class="field-type">String</span><span class="field-note">bcrypt hashed</span></div>
+        <div class="field-row"><span class="field-name">role</span><span class="field-type">String</span><span class="field-note">enum: "user"|"admin"</span></div>
+      </div>
+    </div>
+    <div class="schema-card">
+      <div class="schema-header"><div class="schema-icon" style="background:#0a2520;color:#14b8a6;border:1px solid #0f4a40;">U</div><div><div class="schema-name">Utm</div><div class="schema-rel">ref: Url(urlId), User(userId)</div></div></div>
+      <div class="schema-fields">
+        <div class="field-row"><span class="field-name">urlId</span><span class="field-type">ObjectId</span><span class="field-note">ref: Url</span></div>
+        <div class="field-row"><span class="field-name">userId</span><span class="field-type">ObjectId</span><span class="field-note">ref: User</span></div>
+        <div class="field-row"><span class="field-name">name</span><span class="field-type">String</span><span class="field-note">display name</span></div>
+        <div class="field-row"><span class="field-name">utmSource</span><span class="field-type">String</span><span class="field-note">e.g. "facebook"</span></div>
+        <div class="field-row"><span class="field-name">utmMedium</span><span class="field-type">String</span><span class="field-note">e.g. "social"</span></div>
+        <div class="field-row"><span class="field-name">utmCampaign</span><span class="field-type">String</span><span class="field-note">e.g. "summer_sale"</span></div>
+        <div class="field-row"><span class="field-name">visithistory[]</span><span class="field-type">Array</span><span class="field-note">own click history</span></div>
+      </div>
+    </div>
+    <div class="schema-card">
+      <div class="schema-header"><div class="schema-icon" style="background:#0a2015;color:#22c55e;border:1px solid #1a5c30;">L</div><div><div class="schema-name">Label</div><div class="schema-rel">ref: User(userId), Url[](urls)</div></div></div>
+      <div class="schema-fields">
+        <div class="field-row"><span class="field-name">name</span><span class="field-type">String</span><span class="field-note">required</span></div>
+        <div class="field-row"><span class="field-name">userId</span><span class="field-type">ObjectId</span><span class="field-note">ref: User</span></div>
+        <div class="field-row"><span class="field-name">urls[]</span><span class="field-type">ObjectId[]</span><span class="field-note">ref: Url array</span></div>
+        <div class="field-row"><span class="field-name">timestamps</span><span class="field-type">Auto</span><span class="field-note">createdAt, updatedAt</span></div>
+      </div>
+    </div>
+    <div class="schema-card">
+      <div class="schema-header"><div class="schema-icon" style="background:#2a1a05;color:#f59e0b;border:1px solid #6b4010;">O</div><div><div class="schema-name">Organization</div><div class="schema-rel">standalone</div></div></div>
+      <div class="schema-fields">
+        <div class="field-row"><span class="field-name">name</span><span class="field-type">String</span><span class="field-note">required, unique, trimmed</span></div>
+        <div class="field-row"><span class="field-name">password</span><span class="field-type">String</span><span class="field-note">bcrypt pre-save hook</span></div>
+        <div class="field-row"><span class="field-name">comparePassword()</span><span class="field-type">Method</span><span class="field-note">bcrypt.compare() instance</span></div>
+      </div>
+    </div>
+    <div class="schema-card">
+      <div class="schema-header"><div class="schema-icon" style="background:#2a1008;color:#f97316;border:1px solid #6b2c0a;">OL</div><div><div class="schema-name">OrgLink</div><div class="schema-rel">ref: Organization(orgId)</div></div></div>
+      <div class="schema-fields">
+        <div class="field-row"><span class="field-name">orgId</span><span class="field-type">ObjectId</span><span class="field-note">ref: Organization</span></div>
+        <div class="field-row"><span class="field-name">name</span><span class="field-type">String</span><span class="field-note">required, trimmed</span></div>
+        <div class="field-row"><span class="field-name">androidPath/Scheme/Package</span><span class="field-type">String</span><span class="field-note">intent components</span></div>
+        <div class="field-row"><span class="field-name">androidIntentUrl</span><span class="field-type">String</span><span class="field-note">pre-computed intent://</span></div>
+        <div class="field-row"><span class="field-name">iosAppStoreUrl</span><span class="field-type">String</span><span class="field-note">App Store URL</span></div>
+        <div class="field-row"><span class="field-name">iosWebUrl</span><span class="field-type">String</span><span class="field-note">iOS web fallback</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 6. ROUTES ═══════════════════ -->
+<div id="routes" class="section">
+  <div class="section-title">All API Routes</div>
+  <div class="section-sub">Every endpoint with HTTP method, middleware guard, and description.</div>
+  <div class="sub-heading">/auth — no middleware</div>
+  <table class="route-table"><thead><tr><th>Method</th><th>Path</th><th>Guard</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><span class="method post">POST</span></td><td class="path-cell">/auth/signup</td><td><span class="badge badge-open">open</span></td><td>Hash password, create User + General label, return 200</td></tr>
+    <tr><td><span class="method post">POST</span></td><td class="path-cell">/auth/login</td><td><span class="badge badge-open">open</span></td><td>Verify password via bcrypt, sign JWT with id+username+role, return token</td></tr>
+  </tbody></table>
+  <div class="sub-heading">/urldata — authMiddleware</div>
+  <table class="route-table"><thead><tr><th>Method</th><th>Path</th><th>Guard</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/urldata/myurls</td><td><span class="badge badge-auth">auth</span></td><td>Return all URLs for req.user.id sorted newest first</td></tr>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/urldata/dashboard</td><td><span class="badge badge-auth">auth</span></td><td>All URLs with computed analytics — clicks by device, browser breakdown, UTM summary</td></tr>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/urldata/analytics/:shortid</td><td><span class="badge badge-auth">auth</span></td><td>Deep analytics: daily/weekly/monthly trends, device/browser/referrer/UTM breakdowns, date filter</td></tr>
+    <tr><td><span class="method post">POST</span></td><td class="path-cell">/urldata</td><td><span class="badge badge-auth">auth</span></td><td>Create short URL. Checks duplicate longurl first. Replaces URLID_PLACEHOLDER after save.</td></tr>
+    <tr><td><span class="method pat">PATCH</span></td><td class="path-cell">/urldata/:urlId</td><td><span class="badge badge-auth">auth</span></td><td>Update customName, linkData, androidUrl, iosUrl, or any deep link field</td></tr>
+    <tr><td><span class="method del">DELETE</span></td><td class="path-cell">/urldata/:urlId</td><td><span class="badge badge-auth">auth</span></td><td>Delete URL + remove from all labels via $pull</td></tr>
+  </tbody></table>
+  <div class="sub-heading">/labels — authMiddleware</div>
+  <table class="route-table"><thead><tr><th>Method</th><th>Path</th><th>Guard</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/labels</td><td><span class="badge badge-auth">auth</span></td><td>All labels with URLs populated via .populate("urls")</td></tr>
+    <tr><td><span class="method post">POST</span></td><td class="path-cell">/labels</td><td><span class="badge badge-auth">auth</span></td><td>Create new label</td></tr>
+    <tr><td><span class="method post">POST</span></td><td class="path-cell">/labels/:id/add-url</td><td><span class="badge badge-auth">auth</span></td><td>Add URL via $addToSet (prevents duplicates). Updates customName if provided.</td></tr>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/labels/:id/available-urls</td><td><span class="badge badge-auth">auth</span></td><td>URLs not already in this label — for "add existing" dropdown</td></tr>
+    <tr><td><span class="method del">DELETE</span></td><td class="path-cell">/labels/:id</td><td><span class="badge badge-auth">auth</span></td><td>Delete label document</td></tr>
+    <tr><td><span class="method del">DELETE</span></td><td class="path-cell">/labels/:id/remove-url/:urlId</td><td><span class="badge badge-auth">auth</span></td><td>Remove URL from label via $pull</td></tr>
+  </tbody></table>
+  <div class="sub-heading">/utm — authMiddleware</div>
+  <table class="route-table"><thead><tr><th>Method</th><th>Path</th><th>Guard</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/utm</td><td><span class="badge badge-auth">auth</span></td><td>All UTMs for user with parent URL populated</td></tr>
+    <tr><td><span class="method post">POST</span></td><td class="path-cell">/utm</td><td><span class="badge badge-auth">auth</span></td><td>Create UTM. Verifies parent URL belongs to this user first.</td></tr>
+    <tr><td><span class="method del">DELETE</span></td><td class="path-cell">/utm/:utmId</td><td><span class="badge badge-auth">auth</span></td><td>Delete UTM link</td></tr>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/utm/analytics/:utmId</td><td><span class="badge badge-auth">auth</span></td><td>Device/browser breakdown for one UTM</td></tr>
+  </tbody></table>
+  <div class="sub-heading">/org — mixed per route</div>
+  <table class="route-table"><thead><tr><th>Method</th><th>Path</th><th>Guard</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/org</td><td><span class="badge badge-auth">auth</span></td><td>List org names + IDs. No passwords returned.</td></tr>
+    <tr><td><span class="method post">POST</span></td><td class="path-cell">/org</td><td><span class="badge badge-admin">admin</span></td><td>Create org with name + password</td></tr>
+    <tr><td><span class="method del">DELETE</span></td><td class="path-cell">/org/:id</td><td><span class="badge badge-admin">admin</span></td><td>Delete org + all its OrgLinks</td></tr>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/org/:orgId/links</td><td><span class="badge badge-admin">admin</span></td><td>List all links for an org</td></tr>
+    <tr><td><span class="method post">POST</span></td><td class="path-cell">/org/:orgId/links</td><td><span class="badge badge-admin">admin</span></td><td>Create OrgLink. Computes + stores androidIntentUrl.</td></tr>
+    <tr><td><span class="method del">DELETE</span></td><td class="path-cell">/org/:orgId/links/:linkId</td><td><span class="badge badge-admin">admin</span></td><td>Delete an OrgLink</td></tr>
+    <tr><td><span class="method post">POST</span></td><td class="path-cell">/org/verify-and-fetch</td><td><span class="badge badge-auth">auth</span></td><td>Verify org password via comparePassword(), return links for auto-fill</td></tr>
+  </tbody></table>
+  <div class="sub-heading">/admin + public</div>
+  <table class="route-table"><thead><tr><th>Method</th><th>Path</th><th>Guard</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/admin/dashboard</td><td><span class="badge badge-admin">admin</span></td><td>All URLs from all users with analytics + username mapped from User collection</td></tr>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/go/:shortid</td><td><span class="badge badge-open">open</span></td><td>Device detect → build URL → log visit → redirect</td></tr>
+    <tr><td><span class="method get">GET</span></td><td class="path-cell">/store-redirect/:urlId/:platform</td><td><span class="badge badge-open">open</span></td><td>Log store redirect → redirect to Play Store or App Store</td></tr>
+  </tbody></table>
+</div>
+
+<!-- ═══════════════════ 7. ANALYTICS ═══════════════════ -->
+<div id="analytics" class="section">
+  <div class="section-title">Analytics Page Flow</div>
+  <div class="section-sub">How the analytics page works — from entering a short code to all charts rendering with date-filtered data from the backend.</div>
+
+  <div class="panel-row">
+    <div class="panel-left">
+      <div class="sub-heading">Analytics request flow</div>
+      <div class="chart-wrap">
+        <svg width="320" viewBox="0 0 320 760" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="an" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="anr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="40" y="10" width="240" height="54" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">Analytics page loads</text>
+          <text x="160" y="43" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">user enters short code + date range</text>
+          <text x="160" y="56" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">or arrives via ?code= query param</text>
+          <line x1="160" y1="64" x2="160" y2="89" stroke="#475569" stroke-width="1.5" marker-end="url(#an)"/>
+          <rect x="40" y="90" width="240" height="54" rx="8" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="108" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">GET /urldata/analytics/:shortid</text>
+          <text x="160" y="123" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</text>
+          <text x="160" y="136" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">authMiddleware verifies JWT first</text>
+          <line x1="160" y1="144" x2="160" y2="169" stroke="#475569" stroke-width="1.5" marker-end="url(#an)"/>
+          <polygon points="160,170 260,200 160,230 60,200" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="196" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">URL found?</text>
+          <line x1="260" y1="200" x2="295" y2="200" stroke="#ef4444" stroke-width="1.5" marker-end="url(#anr)"/>
+          <text x="263" y="194" font-family="JetBrains Mono,monospace" font-size="8" fill="#ef4444">no</text>
+          <text x="297" y="197" font-family="JetBrains Mono,monospace" font-size="8" fill="#f87171">404</text>
+          <line x1="160" y1="230" x2="160" y2="255" stroke="#475569" stroke-width="1.5" marker-end="url(#an)"/>
+          <rect x="40" y="256" width="240" height="54" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="274" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">filter visithistory[] by date range</text>
+          <text x="160" y="289" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">fromDate → toDate (both inclusive)</text>
+          <text x="160" y="302" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">default last 30 days if no params</text>
+          <line x1="160" y1="310" x2="160" y2="335" stroke="#475569" stroke-width="1.5" marker-end="url(#an)"/>
+          <rect x="40" y="336" width="240" height="84" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="354" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">compute analytics breakdowns</text>
+          <text x="160" y="369" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">daily / weekly / monthly trend maps</text>
+          <text x="160" y="382" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">device / browser / referrer maps</text>
+          <text x="160" y="395" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">UTM breakdown by source/medium/campaign</text>
+          <text x="160" y="411" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">androidClicks / iosClicks / desktopClicks</text>
+          <line x1="160" y1="420" x2="160" y2="445" stroke="#475569" stroke-width="1.5" marker-end="url(#an)"/>
+          <rect x="40" y="446" width="240" height="44" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="464" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">res.json(analyticsData)</text>
+          <text x="160" y="481" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">all arrays + counts returned</text>
+          <line x1="160" y1="490" x2="160" y2="515" stroke="#475569" stroke-width="1.5" marker-end="url(#an)"/>
+          <rect x="40" y="516" width="240" height="64" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="534" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">Angular receives data</text>
+          <text x="160" y="549" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">this.analyticsData = data</text>
+          <text x="160" y="564" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">cdr.detectChanges()</text>
+          <text x="160" y="574" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">setTimeout → buildAllCharts()</text>
+          <line x1="160" y1="580" x2="160" y2="605" stroke="#475569" stroke-width="1.5" marker-end="url(#an)"/>
+          <rect x="40" y="606" width="240" height="54" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="624" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">Chart.js renders charts</text>
+          <text x="160" y="639" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">buildTrendChart() + buildBreakdownChart()</text>
+          <text x="160" y="654" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">on canvas refs via @ViewChild</text>
+          <text x="160" y="748" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">ANALYTICS FLOW</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel-right">
+      <div class="sub-heading">Charts rendered on the page</div>
+      <div class="detail-block blue">
+        <div class="db-title">Visit Trend Chart (line chart)</div>
+        <p>Built by <code>buildTrendChart()</code>. Uses daily/weekly/monthly arrays from the response. Tab buttons switch the active dataset. X-axis = date labels, Y-axis = visit count. Chart.js line chart with fill area, tension 0.4, blue color scheme. Old chart is destroyed before building new one to prevent canvas reuse errors.</p>
+      </div>
+      <div class="detail-block purple">
+        <div class="db-title">Breakdown Chart (line chart)</div>
+        <p>Built by <code>buildBreakdownChart()</code>. Tab buttons switch between device / browser / source / medium / campaign / referrers. Each tab uses a different array from the response (devices[], browsers[], utmBySource[], etc.). Same Chart.js line style as trend chart for visual consistency.</p>
+      </div>
+      <div class="detail-block teal">
+        <div class="db-title">UTM Performance Table</div>
+        <p>Rendered from <code>analyticsData.utmBreakdown[]</code>. Shows each UTM link's name, source, medium, campaign, click count, and a percentage bar. Bar width = <code>(utm.clicks / totalUtmClicks) * 100</code>. Only shown if utmBreakdown.length &gt; 0.</p>
+      </div>
+      <div class="detail-block amber">
+        <div class="db-title">Date preset buttons</div>
+        <p>7d / 30d / 90d buttons call <code>setPreset()</code>. Sets fromDate and toDate, then if analyticsData already exists, calls <code>analytics()</code> again to refetch with the new range. "Custom" preset lets user pick exact dates via date inputs.</p>
+      </div>
+      <div class="detail-block green">
+        <div class="db-title">Stat cards (4 summary cards)</div>
+        <p>Show filteredVisits (total in range), androidClicks, desktopClicks, and active UTM count. These come directly from the response fields — no client-side computation needed.</p>
+      </div>
+      <div class="sub-heading">How trend data is built on backend</div>
+      <div class="detail-block blue">
+        <div class="db-title">Daily / Weekly / Monthly maps</div>
+        <p>Backend pre-fills maps with zeroes for every slot in the date range (up to 90 days back). Then iterates filteredHistory[] and increments the matching slot for each visit. Ensures gaps with zero visits show as 0 on the chart rather than being missing.</p>
+        <div class="code-block">
+<span class="c">// Pre-fill daily map with zeroes</span><br>
+<span class="k">for</span> (<span class="k">let</span> i = actualDays-<span class="n">1</span>; i >= <span class="n">0</span>; i--) {<br>
+&nbsp;&nbsp;<span class="k">const</span> d = <span class="k">new</span> <span class="fn">Date</span>(now);<br>
+&nbsp;&nbsp;d.<span class="fn">setDate</span>(d.<span class="fn">getDate</span>() - i);<br>
+&nbsp;&nbsp;dailyMap[d.<span class="fn">toISOString</span>().<span class="fn">split</span>(<span class="s">"T"</span>)[<span class="n">0</span>]] = <span class="n">0</span>;<br>
+}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 8. DASHBOARD ═══════════════════ -->
+<div id="dashboard" class="section">
+  <div class="section-title">Dashboard Flow — User &amp; Admin</div>
+   <div class="section-sub">Two separate dashboards in the system: a user dashboard showing only their own links, and an admin dashboard showing all users' links. Both follow similar patterns but hit different endpoints.</div>
+
+  <div class="panel-row">
+    <div class="panel-left">
+      <div class="sub-heading">User dashboard flow</div>
+      <div class="chart-wrap">
+        <svg width="320" viewBox="0 0 320 720" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ud" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="40" y="10" width="240" height="44" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">User navigates to /dashboard</text>
+          <text x="160" y="45" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">authGuard passes (token exists)</text>
+          <line x1="160" y1="54" x2="160" y2="79" stroke="#475569" stroke-width="1.5" marker-end="url(#ud)"/>
+          <rect x="40" y="80" width="240" height="54" rx="8" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="98" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">ngOnInit → loadDashboard()</text>
+          <text x="160" y="113" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">GET /urldata/dashboard</text>
+          <text x="160" y="126" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">authMiddleware → req.user.id scoped</text>
+          <line x1="160" y1="134" x2="160" y2="159" stroke="#475569" stroke-width="1.5" marker-end="url(#ud)"/>
+          <rect x="40" y="160" width="240" height="84" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="178" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">backend computes per URL</text>
+          <text x="160" y="193" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">androidClicks / iosClicks / desktopClicks</text>
+          <text x="160" y="206" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">storeRedirects (android + ios counts)</text>
+          <text x="160" y="219" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">browser breakdown map</text>
+          <text x="160" y="232" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">UTM summary with click counts</text>
+          <line x1="160" y1="244" x2="160" y2="269" stroke="#475569" stroke-width="1.5" marker-end="url(#ud)"/>
+          <rect x="40" y="270" width="240" height="44" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="288" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">Angular: this.urls = data</text>
+          <text x="160" y="305" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">filteredUrls = data (copy for search)</text>
+          <line x1="160" y1="314" x2="160" y2="339" stroke="#475569" stroke-width="1.5" marker-end="url(#ud)"/>
+          <rect x="40" y="340" width="240" height="54" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="358" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">summary pills computed by pipes</text>
+          <text x="160" y="373" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">totalClicks / androidCount /</text>
+          <text x="160" y="386" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">iosCount / desktopCount / storeCount</text>
+          <line x1="160" y1="394" x2="160" y2="419" stroke="#475569" stroke-width="1.5" marker-end="url(#ud)"/>
+          <rect x="40" y="420" width="240" height="54" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="438" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">Chart.js overview chart</text>
+          <text x="160" y="453" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">buildOverviewChart()</text>
+          <text x="160" y="466" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">tab: device/browser/UTM/source/medium/campaign</text>
+          <line x1="160" y1="474" x2="160" y2="499" stroke="#475569" stroke-width="1.5" marker-end="url(#ud)"/>
+          <rect x="40" y="500" width="240" height="64" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="518" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">table renders filteredUrls</text>
+          <text x="160" y="533" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">columns: name, URL, total, android,</text>
+          <text x="160" y="546" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">iOS, desktop, store + optional cols</text>
+          <text x="160" y="559" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">search box filters filteredUrls live</text>
+          <line x1="160" y1="564" x2="160" y2="589" stroke="#475569" stroke-width="1.5" marker-end="url(#ud)"/>
+          <rect x="40" y="590" width="240" height="44" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="608" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">row dot-menu actions</text>
+          <text x="160" y="625" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">→ Analytics / Redirect navigate</text>
+          <text x="160" y="710" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">USER DASHBOARD FLOW</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel-right">
+      <div class="sub-heading">Admin dashboard flow</div>
+      <div class="chart-wrap">
+        <svg width="320" viewBox="0 0 320 720" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ad" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="40" y="10" width="240" height="44" rx="8" fill="#2d1f4e" stroke="#5b3f9e" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">Admin navigates to /admin</text>
+          <text x="160" y="45" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">adminGuard passes (role = admin)</text>
+          <line x1="160" y1="54" x2="160" y2="79" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+          <rect x="40" y="80" width="240" height="54" rx="8" fill="#2a1008" stroke="#6b2c0a" stroke-width="1"/>
+          <text x="160" y="98" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fb923c" font-weight="700">ngOnInit → loadAnalytics()</text>
+          <text x="160" y="113" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">GET /admin/dashboard</text>
+          <text x="160" y="126" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">adminMiddleware → role check</text>
+          <line x1="160" y1="134" x2="160" y2="159" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+          <rect x="40" y="160" width="240" height="84" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="178" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">backend: queries ALL users</text>
+          <text x="160" y="193" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">urlModel.find({}) — no userId filter</text>
+          <text x="160" y="206" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">User.find({}) → build userMap</text>
+          <text x="160" y="219" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">maps userId → username for each URL</text>
+          <text x="160" y="232" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">same analytics computed as user dash</text>
+          <line x1="160" y1="244" x2="160" y2="269" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+          <rect x="40" y="270" width="240" height="44" rx="8" fill="#2d1f4e" stroke="#5b3f9e" stroke-width="1"/>
+          <text x="160" y="288" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">Angular: this.urls = data</text>
+          <text x="160" y="305" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">each URL has username field</text>
+          <line x1="160" y1="314" x2="160" y2="339" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+          <rect x="40" y="340" width="240" height="54" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="358" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">summary pills (computed getters)</text>
+          <text x="160" y="373" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">totalClicks / totalAndroid /</text>
+          <text x="160" y="386" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">totalIos / totalDesktop / totalStore</text>
+          <line x1="160" y1="394" x2="160" y2="419" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+          <rect x="40" y="420" width="240" height="64" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="438" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">Chart.js overview chart</text>
+          <text x="160" y="453" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">buildOverviewChart()</text>
+          <text x="160" y="466" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">extra tab: "Links vs Clicks" (top 20)</text>
+          <text x="160" y="479" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">tooltip shows user, android, ios, desktop</text>
+          <line x1="160" y1="484" x2="160" y2="509" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+          <rect x="40" y="510" width="240" height="64" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="528" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">table renders all users' URLs</text>
+          <text x="160" y="543" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">extra column: username per row</text>
+          <text x="160" y="556" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">search also matches username field</text>
+          <text x="160" y="567" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">read-only — no delete/edit for admin</text>
+          <line x1="160" y1="574" x2="160" y2="599" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+          <rect x="40" y="600" width="240" height="44" rx="8" fill="#2a1008" stroke="#6b2c0a" stroke-width="1"/>
+          <text x="160" y="618" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fb923c" font-weight="700">sidebar: Org Links tab</text>
+          <text x="160" y="635" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">create/delete orgs + org links here</text>
+          <text x="160" y="710" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">ADMIN DASHBOARD FLOW</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="sub-heading">Key differences: user dashboard vs admin dashboard</div>
+  <div class="panel-row" style="margin-bottom:0;">
+    <div class="detail-block blue">
+      <div class="db-title">User dashboard (/dashboard)</div>
+      <p><strong>Endpoint:</strong> GET /urldata/dashboard — scoped to req.user.id<br>
+      <strong>Guard:</strong> authGuard + authMiddleware<br>
+      <strong>Data:</strong> Only their own URLs<br>
+      <strong>Extra feature:</strong> Column filter toggles (browser, UTM, source, medium, campaign, referrer)<br>
+      <strong>Summary pipes:</strong> TotalClicksPipe, AndroidCountPipe, IosCountPipe, StoreCountPipe, DesktopCountPipe<br>
+      <strong>Actions:</strong> Analytics + Redirect links per row</p>
+    </div>
+    <div class="detail-block purple">
+      <div class="db-title">Admin dashboard (/admin)</div>
+      <p><strong>Endpoint:</strong> GET /admin/dashboard — all users, no filter<br>
+      <strong>Guard:</strong> adminGuard + adminMiddleware<br>
+      <strong>Data:</strong> All URLs from all users with username mapped<br>
+      <strong>Extra tab:</strong> "Links vs Clicks" chart showing top 20 links by click count<br>
+      <strong>Summary:</strong> Computed JS getters (totalClicks, totalAndroid, etc.) not pipes<br>
+      <strong>Sidebar:</strong> Org Links management tab alongside Analytics tab</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 9. UTM ═══════════════════ -->
+<div id="utm" class="section">
+  <div class="section-title">UTM Tracking Flow</div>
+  <div class="section-sub">How UTM links are created, how clicks are tracked separately from the base URL, and how analytics are aggregated.</div>
+
+  <div class="panel-row">
+    <div class="panel-left">
+      <div class="sub-heading">Creating + clicking a UTM link</div>
+      <div class="chart-wrap">
+        <svg width="320" viewBox="0 0 320 620" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ut" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="utr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="40" y="10" width="240" height="44" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">User fills UTM form</text>
+          <text x="160" y="45" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">selects URL, name, source, medium, campaign</text>
+          <line x1="160" y1="54" x2="160" y2="79" stroke="#475569" stroke-width="1.5" marker-end="url(#ut)"/>
+          <polygon points="160,80 260,110 160,140 60,110" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="106" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">URL belongs to user?</text>
+          <text x="240" y="100" font-family="JetBrains Mono,monospace" font-size="8" fill="#f87171">no</text>
+<text x="168" y="155" font-family="JetBrains Mono,monospace" font-size="8" fill="#86efac">yes</text>
+          <line x1="260" y1="110" x2="295" y2="110" stroke="#ef4444" stroke-width="1.5" marker-end="url(#utr)"/>
+          <text x="297" y="107" font-family="JetBrains Mono,monospace" font-size="8" fill="#f87171">404</text>
+          <line x1="160" y1="140" x2="160" y2="165" stroke="#475569" stroke-width="1.5" marker-end="url(#ut)"/>
+          <rect x="40" y="166" width="240" height="44" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="184" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">new Utm().save()</text>
+          <text x="160" y="200" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">linked to urlId + userId</text>
+          <line x1="160" y1="210" x2="160" y2="235" stroke="#475569" stroke-width="1.5" marker-end="url(#ut)"/>
+          <rect x="40" y="236" width="240" height="54" rx="8" fill="#1a0f3d" stroke="#3b1f7a" stroke-width="1"/>
+          <text x="160" y="254" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">tracking link shown to user</text>
+          <text x="160" y="269" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">/go/:shorturl?utm_id=:utmId</text>
+          <text x="160" y="282" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">built on frontend via getUtmLink()</text>
+          <line x1="160" y1="290" x2="160" y2="315" stroke="#475569" stroke-width="1.5" marker-end="url(#ut)"/>
+          <rect x="40" y="316" width="240" height="44" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="334" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">Visitor clicks tracking link</text>
+          <text x="160" y="351" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">GET /go/:shortid?utm_id=xxx</text>
+          <line x1="160" y1="360" x2="160" y2="385" stroke="#475569" stroke-width="1.5" marker-end="url(#ut)"/>
+          <rect x="40" y="386" width="240" height="64" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="404" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">visit logged to BOTH</text>
+          <text x="160" y="420" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">→ Url.visithistory[] (base URL click)</text>
+          <text x="160" y="434" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">→ Utm.visithistory[] (UTM click)</text>
+          <text x="160" y="446" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">same visitData saved twice</text>
+          <line x1="160" y1="450" x2="160" y2="475" stroke="#475569" stroke-width="1.5" marker-end="url(#ut)"/>
+          <rect x="40" y="476" width="240" height="40" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="492" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">redirect proceeds normally</text>
+          <text x="160" y="507" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">UTM logging is transparent to visitor</text>
+          <text x="160" y="610" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">UTM TRACKING FLOW</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel-right">
+      <div class="sub-heading">Analytics aggregation</div>
+      <div class="detail-block teal">
+        <div class="db-title">How UTM analytics are built</div>
+        <p>In GET /urldata/analytics/:shortid, after computing base URL stats, the backend fetches all Utm docs linked to this urlId. For each UTM it filters visithistory[] by the same date range and groups clicks by source/medium/campaign using reduce maps. Produces sorted arrays powering the breakdown charts.</p>
+        <div class="code-block">
+<span class="c">// Aggregate by source</span><br>
+utmBreakdown.<span class="fn">forEach</span>(u => {<br>
+&nbsp;&nbsp;<span class="k">const</span> <span class="v">s</span> = u.utmSource || <span class="s">"direct"</span>;<br>
+&nbsp;&nbsp;sourceMap[s] = (sourceMap[s] || <span class="n">0</span>) + u.clicks;<br>
+});
+        </div>
+      </div>
+      <div class="sub-heading">Tracking link structure</div>
+      <div class="detail-block purple">
+        <div class="db-title">getUtmLink() — frontend</div>
+        <p>The tracking link isn't stored in DB — built on the frontend from the base URL's shorturl and the UTM document's _id. This means the Utm document doesn't need its own short code.</p>
+        <div class="code-block">
+<span class="fn">getUtmLink</span>(utm): string {<br>
+&nbsp;&nbsp;<span class="k">return</span> <span class="s">`<span class="v">${apiUrl}</span>/go/<span class="v">${utm.urlId.shorturl}</span>?utm_id=<span class="v">${utm._id}</span>`</span>;<br>
+}
+        </div>
+      </div>
+      <div class="sub-heading">Dual logging explained</div>
+      <div class="detail-block blue">
+        <div class="db-title">Click counting behaviour</div>
+        <p>Clicking a UTM link counts as 1 click on the <strong>base URL</strong> total AND 1 click on the <strong>UTM link</strong>. If you have 100 total clicks on a URL and 60 came via UTM links, the base URL shows 100, the UTMs show 60 combined. The 60 UTM clicks are a subset of the 100 total.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 10. ORG AUTO-FILL ═══════════════════ -->
+<!-- CHANGE 10: Removed the URLID_PLACEHOLDER section at the bottom -->
+<div id="org" class="section">
+  <div class="section-title">Organisation Auto-fill Flow</div>
+   <div class="section-sub">How admins create shared deep link templates, and how users fetch and auto-fill them when creating a short URL.</div>
+
+  <div class="panel-row">
+    <div class="panel-left">
+      <div class="sub-heading">Admin creates org + links</div>
+      <div class="chart-wrap">
+        <svg width="320" viewBox="0 0 320 460" xmlns="http://www.w3.org/2000/svg">
+          <defs><marker id="oa" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker></defs>
+          <rect x="40" y="10" width="240" height="44" rx="8" fill="#2d1f4e" stroke="#5b3f9e" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">Admin: POST /org</text>
+          <text x="160" y="45" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">{ name, password }</text>
+          <line x1="160" y1="54" x2="160" y2="79" stroke="#475569" stroke-width="1.5" marker-end="url(#oa)"/>
+          <rect x="40" y="80" width="240" height="54" rx="8" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="98" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">pre("save") hook fires</text>
+          <text x="160" y="114" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">bcrypt.hash(password, 10)</text>
+          <text x="160" y="127" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">password hashed before save</text>
+          <line x1="160" y1="134" x2="160" y2="159" stroke="#475569" stroke-width="1.5" marker-end="url(#oa)"/>
+          <rect x="40" y="160" width="240" height="40" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="176" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">Organization saved to DB</text>
+          <text x="160" y="192" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">_id assigned</text>
+          <line x1="160" y1="200" x2="160" y2="225" stroke="#475569" stroke-width="1.5" marker-end="url(#oa)"/>
+          <rect x="40" y="226" width="240" height="44" rx="8" fill="#2d1f4e" stroke="#5b3f9e" stroke-width="1"/>
+          <text x="160" y="244" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#c4b5fd" font-weight="700">Admin: POST /org/:id/links</text>
+          <text x="160" y="261" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">android + iOS fields</text>
+          <line x1="160" y1="270" x2="160" y2="295" stroke="#475569" stroke-width="1.5" marker-end="url(#oa)"/>
+          <rect x="40" y="296" width="240" height="54" rx="8" fill="#2a1008" stroke="#6b2c0a" stroke-width="1"/>
+          <text x="160" y="314" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fb923c" font-weight="700">buildIntentUrl() computes</text>
+          <text x="160" y="330" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">intent://path#Intent;scheme=...</text>
+          <text x="160" y="343" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">stored as androidIntentUrl</text>
+          <line x1="160" y1="350" x2="160" y2="375" stroke="#475569" stroke-width="1.5" marker-end="url(#oa)"/>
+          <rect x="40" y="376" width="240" height="40" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="392" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">OrgLink saved to DB</text>
+          <text x="160" y="408" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">linked to org via orgId</text>
+          <text x="160" y="450" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">ADMIN CREATES ORG + LINKS</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="panel-right">
+      <div class="sub-heading">User fetches + applies auto-fill</div>
+      <div class="chart-wrap">
+        <svg width="320" viewBox="0 0 320 580" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ob" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/></marker>
+            <marker id="obr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></marker>
+          </defs>
+          <rect x="40" y="10" width="240" height="44" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="28" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">Home ngOnInit</text>
+          <text x="160" y="45" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">GET /org → loads org names dropdown</text>
+          <line x1="160" y1="54" x2="160" y2="79" stroke="#475569" stroke-width="1.5" marker-end="url(#ob)"/>
+          <rect x="40" y="80" width="240" height="44" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="98" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">User selects org + enters password</text>
+          <text x="160" y="114" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">clicks "Fetch Links"</text>
+          <line x1="160" y1="124" x2="160" y2="149" stroke="#475569" stroke-width="1.5" marker-end="url(#ob)"/>
+          <rect x="40" y="150" width="240" height="44" rx="8" fill="#2a1008" stroke="#6b2c0a" stroke-width="1"/>
+          <text x="160" y="168" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fb923c" font-weight="700">POST /org/verify-and-fetch</text>
+          <text x="160" y="185" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">{ orgId, password }</text>
+          <line x1="160" y1="194" x2="160" y2="219" stroke="#475569" stroke-width="1.5" marker-end="url(#ob)"/>
+          <polygon points="160,220 260,250 160,280 60,250" fill="#2a1a05" stroke="#6b4010" stroke-width="1"/>
+          <text x="160" y="246" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#fcd34d" font-weight="700">comparePassword()?</text>
+          <line x1="260" y1="250" x2="295" y2="250" stroke="#ef4444" stroke-width="1.5" marker-end="url(#obr)"/>
+          <text x="297" y="247" font-family="JetBrains Mono,monospace" font-size="8" fill="#f87171">401</text>
+          <line x1="160" y1="280" x2="160" y2="305" stroke="#475569" stroke-width="1.5" marker-end="url(#ob)"/>
+          <text x="168" y="297" font-family="JetBrains Mono,monospace" font-size="8" fill="#64748b">match</text>
+          <rect x="40" y="306" width="240" height="40" rx="8" fill="#0a2015" stroke="#1a5c30" stroke-width="1"/>
+          <text x="160" y="322" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#86efac" font-weight="700">OrgLink docs returned</text>
+          <text x="160" y="338" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">links dropdown shown</text>
+          <line x1="160" y1="346" x2="160" y2="371" stroke="#475569" stroke-width="1.5" marker-end="url(#ob)"/>
+          <rect x="40" y="372" width="240" height="54" rx="8" fill="#0f1f3d" stroke="#1e3a6e" stroke-width="1"/>
+          <text x="160" y="390" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#7dd3fc" font-weight="700">applyAndroidLink() / applyIosLink()</text>
+          <text x="160" y="406" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">maps OrgLink fields → ngModel vars</text>
+          <text x="160" y="420" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">form fields update via two-way binding</text>
+          <line x1="160" y1="426" x2="160" y2="451" stroke="#475569" stroke-width="1.5" marker-end="url(#ob)"/>
+          <rect x="40" y="452" width="240" height="54" rx="8" fill="#0a2520" stroke="#0f4a40" stroke-width="1"/>
+          <text x="160" y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#5eead4" font-weight="700">User submits form</text>
+          <text x="160" y="486" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">builtAndroidUrl getter builds intent://</text>
+          <text x="160" y="499" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" fill="#64748b">with URLID_PLACEHOLDER</text>
+          <text x="160" y="570" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" fill="#374157">USER AUTO-FILL FLOW</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
